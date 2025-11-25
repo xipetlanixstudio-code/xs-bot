@@ -1,0 +1,11 @@
+services:
+  - name: xs-bot
+    type: web
+    env: node
+    buildCommand: "npm install"
+    startCommand: "npm start"
+    plan: free
+    region: ohio
+    envVars:
+      - key: PORT
+        value: 3000
