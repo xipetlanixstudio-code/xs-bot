@@ -1,72 +1,55 @@
-import "dotenv/config";
-import express from "express";
-import bodyParser from "body-parser";
+const express = require("express");
+const axios = require("axios");
 
 const app = express();
-app.use(bodyParser.json());
+app.use(express.json());
 
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
-const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+const token = process.env.WHATSAPP_TOKEN;
+const verifyToken = process.env.VERIFY_TOKEN;
+const phoneNumberId = process.env.PHONE_NUMBER_ID;
 
-// 1. VERIFICACIÓN DEL WEBHOOK (GET)
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
-  const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
+  const verifyTokenQuery = req.query["hub.verify_token"];
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("Webhook verificado correctamente");
+  if (mode === "subscribe" && verifyTokenQuery === verifyToken) {
     return res.status(200).send(challenge);
+  } else {
+    return res.sendStatus(403);
   }
-
-  return res.sendStatus(403);
 });
 
-// 2. RECEPCIÓN DE MENSAJES (POST)
 app.post("/webhook", async (req, res) => {
-  const body = req.body;
+  try {
+    const entry = req.body.entry?.[0]?.changes?.[0]?.value;
+    const message = entry?.messages?.[0];
 
-  if (body.object === "whatsapp_business_account") {
-    const change = body.entry?.[0]?.changes?.[0];
-    const messages = change?.value?.messages;
-
-    if (messages && messages.length > 0) {
-      const msg = messages[0];
-      const from = msg.from; 
-      const text = msg.text?.body;
+    if (message && message.text) {
+      const from = message.from;
+      const text = message.text.body.trim().toLowerCase();
 
       console.log("MENSAJE RECIBIDO:", text);
 
-      await sendMessage(from, "XS Bot conectado correctamente 🚀");
+      await axios.post(
+        `https://graph.facebook.com/v24.0/${phoneNumberId}/messages`,
+        {
+          messaging_product: "whatsapp",
+          to: from,
+          text: { body: "Recibido ✔️ - XS Bot está ON" },
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
     }
 
     return res.sendStatus(200);
+  } catch (error) {
+    console.log("ERROR AL ENVIAR:", error.response?.data || error.message);
+    return res.sendStatus(500);
   }
-
-  res.sendStatus(404);
 });
 
-// 3. FUNCIÓN PARA ENVIAR MENSAJES
-async function sendMessage(to, message) {
-  const url = `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`;
-
-  const body = {
-    messaging_product: "whatsapp",
-    to,
-    text: { body: message }
-  };
-
-  await fetch(url, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${WHATSAPP_TOKEN}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-}
-
-app.listen(process.env.PORT || 3000, () => {
-  console.log("XS Bot running...");
-});
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log("XS Bot running on port", PORT));
